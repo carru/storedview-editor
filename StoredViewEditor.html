@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en" style="height: 99%;">
+
+<head>
+    <meta charset="utf-8">
+    <title>StoredView editor</title>
+    <meta name="description" content="StoredView editor">
+    <meta name="author" content="c4c">
+</head>
+
+<body style="height: 100%;">
+    <div style="display: flex; flex: auto; flex-direction: row; height: 100%; overflow: auto;">
+        <textarea type="text" id="auxFormat" placeholder="StoredView XML in AUX format" style="flex: 1;"></textarea>
+        <textarea type="text" id="humanFormat" placeholder="StoredView XML in human readable format"
+            style="flex: 1;"></textarea>
+    </div>
+
+    <script>
+        const auxFormat = document.getElementById('auxFormat');
+        const humanFormat = document.getElementById('humanFormat');
+
+        const prettifyXml = (sourceXml) => {
+            if (!sourceXml || sourceXml === "") return "";
+
+            const xmlDoc = new DOMParser().parseFromString(sourceXml, 'application/xml');
+            const xsltDoc = new DOMParser().parseFromString([
+                '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform">',
+                '  <xsl:strip-space elements="*"/>',
+                '  <xsl:template match="para[content-style][not(text())]">', // change to just text() to strip space in text nodes
+                '    <xsl:value-of select="normalize-space(.)"/>',
+                '  </xsl:template>',
+                '  <xsl:template match="node()|@*">',
+                '    <xsl:copy><xsl:apply-templates select="node()|@*"/></xsl:copy>',
+                '  </xsl:template>',
+                '  <xsl:output indent="yes"/>',
+                '</xsl:stylesheet>',
+            ].join('\n'), 'application/xml');
+
+            const xsltProcessor = new XSLTProcessor();
+            xsltProcessor.importStylesheet(xsltDoc);
+            const resultDoc = xsltProcessor.transformToDocument(xmlDoc);
+            return new XMLSerializer().serializeToString(resultDoc);
+        };
+
+        const auxToHuman = () => {
+            let xml = auxFormat.value;
+            xml = xml.replace(/&lt;/g, '<');
+            xml = xml.replace(/&gt;/g, '>');
+            xml = xml.replace(/&quot;/g, '"');
+            humanFormat.value = prettifyXml(xml);
+        };
+
+        const humanToAux = () => {
+            let xml = humanFormat.value;
+            xml = xml.replace(/<ViewData>(.*)<\/ViewData>/s, (match, p1) => {
+                // encode special characters
+                p1 = p1.replace(/</g, '&lt;');
+                p1 = p1.replace(/>/g, '&gt;');
+                p1 = p1.replace(/"/g, '&quot;');
+
+                // remove line breaks
+                p1 = p1.replace(/(\r\n|\n|\r)/g, '');
+
+                // remove blank spaces from tabs (>=2)
+                p1 = p1.replace(/\s{2,}/g, '');
+
+                // add ViewData tag
+                return '<ViewData>' + p1 + '</ViewData>';
+            });
+            auxFormat.value = xml;
+        };
+
+        auxFormat.addEventListener('input', auxToHuman);
+        humanFormat.addEventListener('input', humanToAux);
+    </script>
+</body>
+
+</html>
